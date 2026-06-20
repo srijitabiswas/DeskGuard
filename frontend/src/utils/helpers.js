@@ -147,6 +147,18 @@ export function generateId(prefix = 'ID') {
   return `${prefix}${Date.now().toString(36).toUpperCase()}`;
 }
 
+// ─── Auto-provisioning helpers (frictionless demo/judge logins) ──────────
+export function deriveNameFromEmail(email) {
+  const local = String(email || '').split('@')[0] || '';
+  const parts = local.split(/[._\-\d]+/).filter(Boolean);
+  if (!parts.length) return 'New Student';
+  return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+}
+
+export function pickRandom(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 export function getInitials(name) {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Clock, CheckCircle, XCircle, AlertCircle, Hourglass } from 'lucide-react';
-import { useAuth, useApp } from '../../context/AppContext';
+import { useAuth, useApp, matchSeat } from '../../context/AppContext';
 import { Card, Badge, Tabs, EmptyState, SectionHeader } from '../../components/ui/index';
 import { FLOORS, ZONE_TYPES } from '../../data/mockData';
 import { fmtDuration, fmtTime, fmtDate, getWeekStudyMs, getTodayStudyMs, effectiveStart } from '../../utils/helpers';
@@ -75,7 +75,7 @@ export default function MySessions() {
           <EmptyState icon="📚" title="No sessions yet" body="Book a seat to start your first study session." />
         ) : (
           filtered.map(s => {
-            const seat  = state.seats.find(x => x.id === s.seatId);
+            const seat  = state.seats.find(x => matchSeat(x, s.seatId));
             const floor = FLOORS.find(f => f.id === s.floorId);
             const studyStart = effectiveStart(s);
             const dur   = s.end ? s.end - studyStart : s.status === 'active' ? Date.now() - studyStart : 0;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapPin, Coffee, CheckCircle, LogIn, X, Flame } from 'lucide-react';
-import { useAuth, useApp } from '../../context/AppContext';
+import { useAuth, useApp, matchSeat } from '../../context/AppContext';
 import { Card, Badge, Button, SectionHeader } from '../../components/ui/index';
 import { getTrustTier, fmtDuration, fmtCountdown, getBestStudyTime, getStudyStreak, getTodayStudyMs, getWeekStudyMs, getLiveForecast } from '../../utils/helpers';
 import { HOURLY_FORECAST, FLOORS } from '../../data/mockData';
@@ -38,7 +38,7 @@ export default function StudentHome() {
 
   const mySessions = state.sessions.filter(s => s.studentId === auth?.id);
   const activeSession = state.activeSession;
-  const activeSeat = activeSession ? state.seats.find(s => s.id === activeSession.seatId) : null;
+  const activeSeat = activeSession ? state.seats.find(s => matchSeat(s, activeSession.seatId)) : null;
 
   const todayMs = getTodayStudyMs(mySessions);
   const weekMs = getWeekStudyMs(mySessions);

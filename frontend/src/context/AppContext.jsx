@@ -31,7 +31,7 @@ export function AuthProvider({ children }) {
     }
     const data = await authAPI.login(emailOrUser, password);
     saveToken(data.token);
-    const payload = { ...data.user, loginAt: Date.now() };
+    const payload = { ...data.user, id: data.user.id || data.user._id, loginAt: Date.now() };
     localStorage.setItem('dg_auth', JSON.stringify(payload));
     setAuth(payload);
     return payload;
@@ -77,8 +77,8 @@ const initialState = {
   floors: [],
 };
 
-function matchSeat(s, id) { return s.id === id || s._id === id || s.seatCode === id; }
-function matchSession(s, id) { return s.id === id || s._id === id; }
+export function matchSeat(s, id) { return s.id === id || s._id === id || s.seatCode === id; }
+export function matchSession(s, id) { return s.id === id || s._id === id; }
 
 function reducer(state, action) {
   switch (action.type) {

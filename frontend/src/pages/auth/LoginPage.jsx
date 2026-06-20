@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff, Lock, Mail, GraduationCap, BookOpen, ShieldCheck, ArrowLeft } from 'lucide-react';
-import { STUDENTS, LIBRARIANS, ADMINS } from '../../data/mockData';
-import { useAuth } from '../../context/AppContext';
+import { ADMINS, LIBRARIANS, DEPARTMENTS } from '../../data/mockData';
+import { useAuth, useApp } from '../../context/AppContext';
 import { Button, Input } from '../../components/ui/index';
+import { deriveNameFromEmail, pickRandom, getInitials } from '../../utils/helpers';
 
 const ROLE_OPTIONS = [
   { role: 'student',   label: 'Student',   icon: GraduationCap, desc: 'Find seats & track sessions',  email: 'srijita.biswas@uni.edu', pw: 'pass123' },
@@ -13,6 +14,7 @@ const ROLE_OPTIONS = [
 
 export default function LoginPage() {
   const { login, apiMode } = useAuth();
+  const { state, dispatch } = useApp();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,24 +25,68 @@ export default function LoginPage() {
 
   async function doLogin(loginEmail, loginPassword) {
     setError('');
-    if (apiMode) {
+
+    // Always try the real backend first — don't rely on the apiMode flag's
+    // timing, since it's set asynchronously on mount and can still be false
+    // even when the backend is reachable. Only fall back to mock-data
+    // accounts if the backend is genuinely unreachable (a network error),
+    // not if it responds with "invalid credentials".
+    try {
       const result = await login(loginEmail, loginPassword);
       if (result.role === 'admin') navigate('/admin');
       else if (result.role === 'librarian') navigate('/librarian');
       else navigate('/student');
       return;
+    } catch (err) {
+      if (err.status) {
+        // Backend responded — this is a real auth rejection, surface it.
+        throw err;
+      }
+      // No err.status means the request never reached the server
+      // (network error) — fall through to mock-data login below.
     }
+
     await new Promise(r => setTimeout(r, 450));
+
+    // Staff roles stay fixed-list — no auto-provisioning for admin/librarian.
     const admin = ADMINS.find(a => a.email === loginEmail && a.password === loginPassword);
     if (admin) { login({ ...admin, role: 'admin' }); navigate('/admin'); return; }
     const lib = LIBRARIANS.find(l => l.email === loginEmail && l.password === loginPassword);
     if (lib) { login({ ...lib, role: 'librarian' }); navigate('/librarian'); return; }
-    const stu = STUDENTS.find(s => s.email === loginEmail);
+
+    // Student — fully frictionless: any email/password works.
+    const stu = state.students.find(s => s.email === loginEmail);
     if (stu) {
-      if (!stu.activated) { navigate(`/activate?id=${stu.id}`); return; }
-      if (stu.password === loginPassword) { login({ ...stu, role: 'student' }); navigate('/student'); return; }
+      if (stu.activated && stu.password) {
+        if (stu.password === loginPassword) { login({ ...stu, role: 'student' }); navigate('/student'); return; }
+        throw new Error('Incorrect email or password.');
+      }
+      // Pre-loaded but never claimed — auto-activate right now instead of
+      // bouncing to a separate Activate page.
+      const activated = { ...stu, activated: true, password: loginPassword };
+      dispatch({ type: 'UPDATE_STUDENT_INFO', studentId: stu.id, updates: { activated: true, password: loginPassword } });
+      login({ ...activated, role: 'student' });
+      navigate('/student');
+      return;
     }
-    throw new Error('Incorrect email or password.');
+
+    // No record anywhere for this email — create a brand-new student
+    // account on the spot, exactly like the real backend now does.
+    const name = deriveNameFromEmail(loginEmail);
+    const newStudent = {
+      id: 'STU' + Date.now().toString().slice(-8),
+      name,
+      email: loginEmail,
+      dept: pickRandom(DEPARTMENTS),
+      year: 1 + Math.floor(Math.random() * 4),
+      avatar: getInitials(name),
+      trustScore: 60,
+      activated: true,
+      password: loginPassword,
+    };
+    dispatch({ type: 'ADD_STUDENT', student: newStudent });
+    login({ ...newStudent, role: 'student' });
+    navigate('/student');
   }
 
   async function handleLogin() {
@@ -93,8 +139,11 @@ export default function LoginPage() {
           {error && <div className="bg-alert-soft border border-alert/20 rounded-xl px-4 py-3 text-sm text-alert">{error}</div>}
           <Button fullWidth loading={loading} onClick={handleLogin} size="lg">Sign in</Button>
         </div>
-        <p className="text-center text-sm text-t3 mt-4">
-          New student? <Link to="/activate" className="text-accent font-medium hover:underline">Activate account</Link>
+        <p className="text-xs text-t3 text-center mt-3">
+          No account yet? Any email + password creates a student account instantly.
+        </p>
+        <p className="text-center text-sm text-t3 mt-3">
+          Prefer a guided setup? <Link to="/activate" className="text-accent font-medium hover:underline">Activate account</Link>
         </p>
       </div>
 

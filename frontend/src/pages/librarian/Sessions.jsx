@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Search, RefreshCw, Clock } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { useApp, matchSeat } from '../../context/AppContext';
 import { Card, Badge, Button, Tabs, Input, EmptyState } from '../../components/ui/index';
 import { STUDENTS, FLOORS } from '../../data/mockData';
 import { fmtDuration, fmtTime, fmtDate, effectiveStart } from '../../utils/helpers';
@@ -79,7 +79,7 @@ export default function LibrarianSessions() {
             const floor = FLOORS.find(f => f.id === s.floorId);
             const studyStart = effectiveStart(s);
             const dur   = s.end ? s.end - studyStart : s.status === 'active' ? Date.now() - studyStart : 0;
-            const seat  = state.seats.find(x => x.id === s.seatId);
+            const seat  = state.seats.find(x => matchSeat(x, s.seatId));
 
             return (
               <Card key={s.id} padding="md">

@@ -1,4 +1,4 @@
-require('dotenv').config({ path: '../.env' });
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const mongoose = require('mongoose');
 const bcrypt   = require('bcryptjs');
 
@@ -11,7 +11,9 @@ const Session   = require('../models/Session');
 const Notification = require('../models/Notification');
 
 async function seed() {
-  await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/deskguard');
+  const uri = process.env.MONGO_URI || 'mongodb://localhost:27017/deskguard';
+  console.log('Target database:', uri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'));
+  await mongoose.connect(uri);
   console.log('Connected to MongoDB...');
 
   // Clear all

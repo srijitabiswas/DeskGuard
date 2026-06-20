@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ShieldCheck, Eye, EyeOff, User, Mail, Lock } from 'lucide-react';
-import { STUDENTS } from '../../data/mockData';
+import { ShieldCheck, Eye, EyeOff, User, Mail, Lock, Sparkles } from 'lucide-react';
+import { DEPARTMENTS } from '../../data/mockData';
 import { useAuth, useApp } from '../../context/AppContext';
 import { Button, Input, Badge } from '../../components/ui/index';
+import { authAPI } from '../../utils/api';
+import { deriveNameFromEmail, pickRandom, getInitials } from '../../utils/helpers';
 
 const STEPS = ['Verify Identity', 'Set Password', 'All Set!'];
 
 export default function ActivatePage() {
   const { login } = useAuth();
-  const { toast } = useApp();
+  const { toast, state, dispatch } = useApp();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [studentId, setStudentId] = useState('');
@@ -25,38 +27,78 @@ export default function ActivatePage() {
     setError('');
     if (!studentId || !email) { setError('Both fields are required.'); return; }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 500));
-    const stu = STUDENTS.find(s => s.id === studentId && s.email === email);
-    if (!stu) {
-      setError('No student record found. Check your Student ID and email.');
+    try {
+      const res = await authAPI.verifyStudent(studentId, email);
+      setFoundStudent({ ...res.student, id: studentId, email, trustScore: res.student.trustScore ?? 60 });
+      setStep(1);
+    } catch (err) {
+      if (err.status) {
+        // Backend reachable, but rejected — surface the real reason.
+        setError(err.message || 'No student record found.');
+      } else {
+        // Backend unreachable — fall back to mock data, but never block:
+        // if there's no record for this ID/email, create one on the spot
+        // instead of erroring, so any made-up credentials work.
+        await new Promise(r => setTimeout(r, 400));
+        let stu = state.students.find(s => s.id === studentId && s.email === email);
+        if (stu?.activated) {
+          setError('This account is already activated. Please sign in.');
+        } else {
+          if (!stu) {
+            const name = deriveNameFromEmail(email);
+            stu = {
+              id: studentId,
+              email,
+              name,
+              dept: pickRandom(DEPARTMENTS),
+              year: 1 + Math.floor(Math.random() * 4),
+              avatar: getInitials(name),
+              trustScore: 60,
+              activated: false,
+              password: null,
+            };
+            dispatch({ type: 'ADD_STUDENT', student: stu });
+          }
+          setFoundStudent(stu);
+          setStep(1);
+        }
+      }
+    } finally {
       setLoading(false);
-      return;
     }
-    if (stu.activated) {
-      setError('This account is already activated. Please sign in.');
-      setLoading(false);
-      return;
-    }
-    setFoundStudent(stu);
-    setStep(1);
-    setLoading(false);
   }
 
   async function handleSetPassword() {
     setError('');
-    if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
+    if (password.length < 4) { setError('Password must be at least 4 characters.'); return; }
     if (password !== confirm) { setError('Passwords do not match.'); return; }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 600));
-    // In real app: API call. Here we update the in-memory record.
-    foundStudent.activated = true;
-    foundStudent.password = password;
-    setStep(2);
-    setLoading(false);
+    try {
+      await authAPI.activate(studentId, email, password);
+      setStep(2);
+    } catch (err) {
+      if (err.status) {
+        setError(err.message || 'Could not activate account.');
+      } else {
+        // Backend unreachable — mock activation, in-memory only.
+        await new Promise(r => setTimeout(r, 500));
+        dispatch({ type: 'UPDATE_STUDENT_INFO', studentId: foundStudent.id, updates: { activated: true, password } });
+        setFoundStudent(prev => ({ ...prev, activated: true, password }));
+        setStep(2);
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function handleGoDashboard() {
-    login({ ...foundStudent, role: 'student' });
+  async function handleGoDashboard() {
+    try {
+      // Real login — gets a real token now that a password is set on the backend.
+      await login(email, password);
+    } catch {
+      // Mock fallback (offline demo mode).
+      login({ ...foundStudent, role: 'student' });
+    }
     navigate('/student');
   }
 
@@ -70,6 +112,16 @@ export default function ActivatePage() {
         <h1 className="text-2xl font-bold text-t1">Activate Account</h1>
         <p className="text-t3 text-sm mt-1">DeskGuard · Student Portal</p>
       </div>
+
+      {/* Answers the #1 question first-time testers ask: "I don't have a real ID" */}
+      {step === 0 && (
+        <div className="flex items-start gap-2.5 bg-accent-soft border border-accent/15 rounded-2xl px-4 py-3 mb-5 w-full max-w-sm">
+          <Sparkles size={15} className="text-accent flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-accent/90 leading-relaxed">
+            No real Student ID? No problem — type anything (e.g. <span className="font-mono">STU0001</span> + any email) and we'll create the account for you right now.
+          </p>
+        </div>
+      )}
 
       {/* Stepper */}
       <div className="flex items-center gap-2 mb-6 w-full max-w-sm">
@@ -116,9 +168,6 @@ export default function ActivatePage() {
                 Verify Identity
               </Button>
             </div>
-            <p className="text-xs text-t3 text-center mt-4">
-              Try: ID <span className="font-mono font-semibold">STU2024004</span> · email <span className="font-mono font-semibold">sneha.reddy@uni.edu</span>
-            </p>
           </>
         )}
 
@@ -138,7 +187,7 @@ export default function ActivatePage() {
               <Input
                 label="Password"
                 type={showPw ? 'text' : 'password'}
-                placeholder="Min. 6 characters"
+                placeholder="Min. 4 characters"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 icon={<Lock size={16} />}
